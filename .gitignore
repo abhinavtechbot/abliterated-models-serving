@@ -1,0 +1,48 @@
+# ==============================================================================
+# Model Weights & Quantized Blobs (Do not commit multi-gigabyte files)
+# ==============================================================================
+*.gguf
+*.gguf.part
+models/*.gguf
+models/*.gguf.part
+!models/.gitkeep
+
+# ==============================================================================
+# Compiled Binaries & Vendor Tools
+# ==============================================================================
+bin/llama
+bin/llama/
+bin/cloudflared
+bin/smc_sensors
+bin/gpu_sensors
+
+# ==============================================================================
+# Runtime State, Telemetry Databases, Logs & Ephemeral Files
+# ==============================================================================
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-*
+*.log
+tunnel_url.txt
+active_model.txt.tmp
+
+# ==============================================================================
+# Python virtual environments & bytecode cache
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# ==============================================================================
+# macOS Metadata
+# ==============================================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*

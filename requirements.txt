@@ -1,0 +1,3 @@
+# Core server and telemetry engine use macOS built-in Python standard library.
+# Optional utilities:
+huggingface_hub>=0.20.0

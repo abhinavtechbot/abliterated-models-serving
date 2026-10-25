@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MacGuard — System & Unauthorized Usage Monitor</title>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --panel: #131b2e;
+      --panel-alt: #18233c;
+      --border: #263554;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --ok: #10b981;
+      --warn: #f59e0b;
+      --crit: #ef4444;
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      --mono: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+      padding: 20px;
+    }
+    .container { max-width: 1440px; margin: 0 auto; }
+
+    /* Header */
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 22px;
+      margin-bottom: 18px;
+    }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .shield {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 18px; color: #fff;
+    }
+    .brand h1 { font-size: 19px; font-weight: 700; letter-spacing: -0.3px; }
+    .brand p { font-size: 12px; color: var(--muted); }
+
+    .header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .status-pill {
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+    .status-SECURE { background: rgba(16, 185, 129, 0.16); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .status-WARNING { background: rgba(245, 158, 11, 0.16); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .status-CRITICAL { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.5); }
+
+    button {
+      background: var(--panel-alt);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 7px 13px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    button:hover { background: #223254; border-color: var(--accent); }
+    button.primary { background: #0284c7; border-color: #38bdf8; color: #fff; }
+    button.primary:hover { background: #0369a1; }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .card-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .kpi-value { font-size: 26px; font-weight: 700; font-family: var(--mono); margin-bottom: 6px; }
+    .kpi-sub { font-size: 12.5px; color: var(--muted); display: flex; justify-content: space-between; }
+    .bar-bg {
+      width: 100%; height: 6px; background: #0b1324;
+      border-radius: 4px; overflow: hidden; margin: 8px 0;
+    }
+    .bar-fill { height: 100%; background: var(--accent); transition: width 0.3s ease; }
+
+    /* Charts & Alerts Row */
+    .mid-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    @media (max-width: 1024px) { .mid-grid { grid-template-columns: 1fr; } }
+
+    canvas { width: 100%; height: 170px; display: block; margin-top: 8px; }
+
+    /* Alerts list */
+    .alert-list { max-height: 365px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+    .alert-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--panel-alt);
+      border-left: 4px solid var(--accent);
+      font-size: 13px;
+    }
+    .alert-item.CRITICAL { border-left-color: var(--crit); background: rgba(239, 68, 68, 0.09); }
+    .alert-item.WARNING { border-left-color: var(--warn); background: rgba(245, 158, 11, 0.09); }
+    .alert-header { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 3px; }
+    .alert-meta { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .alert-details { font-size: 12px; color: #cbd5e1; font-family: var(--mono); word-break: break-all; }
+
+    /* Detail Grid */
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(580px, 1fr));
+      gap: 16px;
+    }
+    @media (max-width: 700px) { .detail-grid { grid-template-columns: 1fr; } }
+
+    .table-wrap { max-height: 310px; overflow-y: auto; margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    th, td {
+      text-align: left;
+      padding: 7px 10px;
+      border-bottom: 1px solid rgba(38, 53, 84, 0.6);
+      font-family: var(--mono);
+    }
+    th {
+      position: sticky; top: 0;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-family: var(--font);
+      font-weight: 600;
+      font-size: 11.5px;
+      text-transform: uppercase;
+    }
+    tr:hover td { background: rgba(56, 189, 248, 0.05); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--mono);
+    }
+    .badge-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .badge-warn { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+    .badge-crit { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .badge-info { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+
+    /* Mobile Enhancements */
+    @media (max-width: 640px) {
+      body {
+        padding: 10px 8px;
+      }
+      header {
+        padding: 12px 14px;
+        gap: 12px;
+      }
+      .brand {
+        width: 100%;
+      }
+      .brand h1 {
+        font-size: 16.5px;
+      }
+      .header-controls {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+      .header-controls button {
+        width: 100%;
+        padding: 10px 12px;
+        font-size: 13px;
+      }
+      .status-pill {
+        text-align: center;
+        width: 100%;
+      }
+      .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+      }
+      .card {
+        padding: 12px;
+      }
+      .card-title {
+        font-size: 11px;
+      }
+      .kpi-value {
+        font-size: 20px;
+      }
+      .kpi-sub {
+        font-size: 11px;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .mid-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .detail-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      table {
+        min-width: 480px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="shield">MG</div>
+        <div>
+          <h1>MacGuard Security & System Monitor</h1>
+          <p id="last-updated">Initializing telemetry collector...</p>
+        </div>
+      </div>
+      <div class="header-controls">
+        <span id="posture-badge" class="status-pill status-SECURE">CHECKING</span>
+        <button class="primary" onclick="window.location.href='/chat'">💬 Open Qwen3.5 Chat Studio</button>
+        <button onclick="saveBaseline()">Save Trusted Baseline</button>
+        <button onclick="triggerDeepScan()">Deep Auth Log Scan</button>
+        <button onclick="clearAlerts()">Acknowledge Alerts</button>
+      </div>
+    </header>
+
+    <div class="kpi-grid">
+      <div class="card">
+        <div class="card-title"><span>CPU & System Load</span><span id="ncpu-label">-- Cores</span></div>
+        <div class="kpi-value" id="cpu-val">0.0%</div>
+        <div class="bar-bg"><div class="bar-fill" id="cpu-bar" style="width:0%"></div></div>
+        <div class="kpi-sub">
+          <span>Load Avg (1m / 5m / 15m)</span>
+          <span id="load-val">0.00 / 0.00 / 0.00</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span>Memory & Disk</span><span id="disk-label">Disk: --%</span></div>
+        <div class="kpi-value" id="mem-val">0.0%</div>
+        <div class="bar-bg"><div class="bar-fill" id="mem-bar" style="width:0%"></div></div>
+        <div class="kpi-sub">
+          <span>RAM Used / Total</span>
+          <span id="mem-gb-val">-- / -- GB</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span>GPU & VRAM</span><span id="gpu-count-label">-- GPUs</span></div>
+        <div class="kpi-value" id="gpu-val">0.0%</div>
+        <div class="bar-bg"><div class="bar-fill" id="gpu-bar" style="width:0%; background:#f43f5e;"></div></div>
+        <div class="kpi-sub">
+          <span>VRAM In Use</span>
+          <span id="gpu-vram-val">-- / -- MB</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span>Thermals & Fans</span><span id="fans-label">-- / -- RPM</span></div>
+        <div class="kpi-value" id="temp-val">--°C / --°C</div>
+        <div class="bar-bg"><div class="bar-fill" id="temp-bar" style="width:0%; background:#fb923c;"></div></div>
+        <div class="kpi-sub">
+          <span>CPU / GPU (Mem / Bat)</span>
+          <span id="temp-sub-val">--°C / --°C</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span>Local LLM (Qwen3.5-9B)</span><span id="llm-state-label">CHECKING</span></div>
+        <div class="kpi-value" id="llm-speed-val">0.0 tok/s</div>
+        <div class="bar-bg"><div class="bar-fill" id="llm-bar" style="width:0%; background:#a855f7;"></div></div>
+        <div class="kpi-sub">
+          <span>Tokens (Prompt / Gen)</span>
+          <span id="llm-tokens-val">0 / 0</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span>Network Activity</span><span id="conns-label">0 Established</span></div>
+        <div class="kpi-value" id="net-val">↓ 0.0  ↑ 0.0 KB/s</div>
+        <div class="kpi-sub" style="margin-top: 14px;">
+          <span>Listening Ports (Exposed)</span>
+          <span id="ports-val">0 (0 exposed)</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span>Sessions & Baseline</span><span id="baseline-badge">No Baseline</span></div>
+        <div class="kpi-value" id="sessions-val">0 Active</div>
+        <div class="kpi-sub" style="margin-top: 14px;">
+          <span>LaunchAgents / SSH Keys</span>
+          <span id="persist-val">0 items / 0 keys</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mid-grid">
+      <div class="card">
+        <div class="card-title">
+          <span>Live Resource, Thermal & Network Telemetry (Last 5 Min)</span>
+          <span style="color: var(--accent)">● CPU/RAM/GPU % &nbsp; ● CPU/GPU °C &nbsp; ● Net KB/s</span>
+        </div>
+        <canvas id="cpuChart" width="700" height="130"></canvas>
+        <canvas id="tempChart" width="700" height="130" style="margin-top:10px;"></canvas>
+        <canvas id="netChart" width="700" height="130" style="margin-top:10px;"></canvas>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>Unauthorized Usage & Anomaly Alerts</span>
+          <span id="alert-counter">0 Active</span>
+        </div>
+        <div id="alert-list" class="alert-list">
+          <div style="color: var(--muted); padding: 16px;">No active unauthorized usage alerts.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <!-- Local LLM Usage & Interactive Console -->
+      <div class="card" style="grid-column: 1 / -1;">
+        <div class="card-title">
+          <span>Local LLM Server — Qwen3.5-9B-IQ4_XS (OpenAI-Compatible Endpoint: http://127.0.0.1:8080/v1)</span>
+          <span id="llm-panel-badge">Initializing...</span>
+        </div>
+        <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; align-items:flex-start;">
+          <div style="flex:1; min-width:280px;">
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <input id="llm-prompt-input" type="text" value="Write a fast Python function to check if a number is prime."
+                style="flex:1; background:#0b1324; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px 12px; font-family:var(--font); font-size:13px;" />
+              <button class="primary" id="llm-send-btn" onclick="sendLlmPrompt()">Run Prompt</button>
+            </div>
+            <pre id="llm-output-box" style="background:#0b1324; border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-family:var(--mono); font-size:12px; color:#cbd5e1; white-space:pre-wrap; max-height:160px; overflow-y:auto;">Ready. Click "Run Prompt" to benchmark Qwen3.5-9B-IQ4_XS and watch live CPU/GPU/Thermal telemetry.</pre>
+          </div>
+          <div style="width:360px; background:var(--panel-alt); border:1px solid var(--border); border-radius:8px; padding:10px 14px; font-family:var(--mono); font-size:12px;">
+            <div style="color:var(--muted); font-size:11px; text-transform:uppercase; margin-bottom:6px;">Live LLM Telemetry</div>
+            <div id="llm-telemetry-summary">Loading model telemetry...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Listening Ports -->
+      <div class="card">
+        <div class="card-title">
+          <span>Listening TCP Ports (Inbound Attack Surface)</span>
+          <span id="listen-count">0 ports</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Process</th>
+                <th>PID</th>
+                <th>User</th>
+                <th>Bind Address</th>
+                <th>Port</th>
+                <th>Exposure / Trust</th>
+              </tr>
+            </thead>
+            <tbody id="listen-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Outbound / Established Connections -->
+      <div class="card">
+        <div class="card-title">
+          <span>Active Established Network Connections</span>
+          <span id="est-count">0 connections</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Process</th>
+                <th>PID</th>
+                <th>User</th>
+                <th>Local</th>
+                <th>Remote Endpoint</th>
+                <th>Port</th>
+              </tr>
+            </thead>
+            <tbody id="est-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Top Processes -->
+      <div class="card">
+        <div class="card-title">
+          <span>Top Processes & Resource Spikes</span>
+          <span>Sorted by %CPU</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>PID</th>
+                <th>User</th>
+                <th>%CPU</th>
+                <th>%MEM</th>
+                <th>Elapsed</th>
+                <th>Command</th>
+              </tr>
+            </thead>
+            <tbody id="proc-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Active Sessions & Logins -->
+      <div class="card">
+        <div class="card-title">
+          <span>Active Sessions, Logins & Unified Auth Events</span>
+          <span id="who-count">0 sessions</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>User / Source</th>
+                <th>TTY / Scope</th>
+                <th>Details / Timestamp</th>
+              </tr>
+            </thead>
+            <tbody id="auth-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- GPU Adapters & Compute Contexts -->
+      <div class="card" style="grid-column: 1 / -1;">
+        <div class="card-title">
+          <span>GPU Adapters, VRAM & Active Compute Contexts (IORegistry Telemetry)</span>
+          <span id="gpu-panel-label">0 adapters</span>
+        </div>
+        <div class="table-wrap" style="max-height: 200px;">
+          <table>
+            <thead>
+              <tr>
+                <th>GPU Model</th>
+                <th>Type</th>
+                <th>Utilization</th>
+                <th>VRAM Used / Total</th>
+                <th>Surfaces / Textures</th>
+                <th>Active Contexts (2D / GL / OpenCL / Video)</th>
+              </tr>
+            </thead>
+            <tbody id="gpu-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Persistence Watch -->
+      <div class="card" style="grid-column: 1 / -1;">
+        <div class="card-title">
+          <span>macOS Persistence Monitor (LaunchAgents / LaunchDaemons / SSH Keys)</span>
+          <span id="persist-count">0 plists</span>
+        </div>
+        <div class="table-wrap" style="max-height: 230px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Scope</th>
+                <th>Name</th>
+                <th>Modified</th>
+                <th>SHA-256 (16c)</th>
+                <th>Path</th>
+              </tr>
+            </thead>
+            <tbody id="persist-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function drawChart(canvasId, seriesList, yMaxFixed) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Grid lines
+      ctx.strokeStyle = "rgba(38, 53, 84, 0.5)";
+      ctx.lineWidth = 1;
+      for (let i = 1; i <= 3; i++) {
+        const y = (h / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      let maxVal = yMaxFixed || 10;
+      if (!yMaxFixed) {
+        seriesList.forEach(s => {
+          s.data.forEach(v => { if (v > maxVal) maxVal = v * 1.15; });
+        });
+      }
+
+      seriesList.forEach(s => {
+        const pts = s.data;
+        if (!pts.length) return;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        pts.forEach((val, idx) => {
+          const x = pts.length === 1 ? w : (idx / (pts.length - 1)) * (w - 16) + 8;
+          const y = h - 14 - Math.min(1, val / maxVal) * (h - 28);
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        ctx.fillStyle = s.color;
+        ctx.font = "11px -apple-system, sans-serif";
+        const latest = pts[pts.length - 1] ?? 0;
+        ctx.fillText(`${s.label}: ${latest}`, s.labelX, 14);
+      });
+    }
+
+    async function fetchOverview() {
+      try {
+        const res = await fetch("/api/overview");
+        const d = await res.json();
+        renderDashboard(d);
+      } catch (e) {
+        console.error("Failed to fetch overview:", e);
+      }
+    }
+
+    function renderDashboard(d) {
+      const tunnelInfo = d.tunnel_url ? ` • Cloudflare Tunnel: ${d.tunnel_url}` : "";
+      document.getElementById("last-updated").textContent =
+        `Last scan: ${d.timestamp} • Auto-refreshing every 4s${tunnelInfo}`;
+
+      const badge = document.getElementById("posture-badge");
+      badge.textContent = d.status;
+      badge.className = "status-pill status-" + (d.status.includes("CRITICAL") ? "CRITICAL" : d.status);
+
+      // KPIs
+      const r = d.resources;
+      document.getElementById("ncpu-label").textContent = `${r.ncpu} Cores`;
+      document.getElementById("cpu-val").textContent = `${r.cpu_pct}%`;
+      document.getElementById("cpu-bar").style.width = `${Math.min(100, r.cpu_pct)}%`;
+      document.getElementById("cpu-bar").style.background =
+        r.cpu_pct > 80 ? "var(--crit)" : r.cpu_pct > 50 ? "var(--warn)" : "var(--accent)";
+      document.getElementById("load-val").textContent =
+        `${r.load_1m.toFixed(2)} / ${r.load_5m.toFixed(2)} / ${r.load_15m.toFixed(2)}`;
+
+      document.getElementById("disk-label").textContent =
+        `Disk: ${r.disk_pct}% (${r.disk_used_gb}/${r.disk_total_gb}G)`;
+      document.getElementById("mem-val").textContent = `${r.mem_pct}%`;
+      document.getElementById("mem-bar").style.width = `${Math.min(100, r.mem_pct)}%`;
+      document.getElementById("mem-gb-val").textContent =
+        `${r.mem_used_gb} / ${r.mem_total_gb} GB`;
+
+      const gpus = r.gpus || [];
+      const gpuPct = r.gpu_pct ?? 0.0;
+      document.getElementById("gpu-count-label").textContent = `${gpus.length} GPU${gpus.length === 1 ? "" : "s"}`;
+      document.getElementById("gpu-val").textContent = `${gpuPct}%`;
+      document.getElementById("gpu-bar").style.width = `${Math.min(100, gpuPct)}%`;
+      document.getElementById("gpu-bar").style.background =
+        gpuPct > 80 ? "var(--crit)" : gpuPct > 50 ? "var(--warn)" : "#f43f5e";
+      document.getElementById("gpu-vram-val").textContent =
+        `${r.gpu_vram_used_mb ?? 0} / ${r.gpu_vram_total_mb ?? 0} MB`;
+
+      // Thermals & Fans
+      const th = r.thermals || {};
+      const cpuT = th.cpu_temp_c ?? 0.0;
+      const gpuT = th.gpu_temp_c ?? 0.0;
+      const maxT = Math.max(cpuT, gpuT);
+      document.getElementById("fans-label").textContent =
+        `Fans: ${th.fan0_rpm ?? 0} / ${th.fan1_rpm ?? 0} RPM`;
+      document.getElementById("temp-val").textContent = `${cpuT}°C / ${gpuT}°C`;
+      document.getElementById("temp-bar").style.width = `${Math.min(100, maxT)}%`;
+      document.getElementById("temp-bar").style.background =
+        maxT >= 85 ? "var(--crit)" : maxT >= 70 ? "var(--warn)" : "#fb923c";
+      document.getElementById("temp-sub-val").textContent =
+        `Mem ${th.mem_temp_c ?? 0}°C • Bat ${th.battery_temp_c ?? 0}°C`;
+
+      // Local LLM KPI
+      const llm = d.llm || {};
+      const llmState = llm.state || "OFFLINE";
+      document.getElementById("llm-state-label").textContent = llmState;
+      if (llmState === "DOWNLOADING") {
+        document.getElementById("llm-speed-val").textContent = `${llm.download_pct}%`;
+        document.getElementById("llm-bar").style.width = `${llm.download_pct}%`;
+        document.getElementById("llm-tokens-val").textContent =
+          `${llm.downloaded_mb} / ${llm.total_mb} MB`;
+      } else {
+        document.getElementById("llm-speed-val").textContent =
+          `${llm.gen_tok_per_sec ?? 0.0} tok/s`;
+        document.getElementById("llm-bar").style.width =
+          llm.server_online ? "100%" : "25%";
+        document.getElementById("llm-bar").style.background =
+          llm.server_online ? "var(--ok)" : "var(--warn)";
+        document.getElementById("llm-tokens-val").textContent =
+          `${llm.prompt_tokens ?? 0} in / ${llm.completion_tokens ?? 0} out`;
+      }
+      document.getElementById("llm-panel-badge").textContent =
+        `${llm.model_name || "Qwen3.5-9B"} • ${llmState}`;
+      document.getElementById("llm-telemetry-summary").innerHTML = `
+        <div>Model: <strong>${llm.model_name || "Qwen3.5-9B-IQ4_XS"}</strong> (${llm.downloaded_mb || 0}/${llm.total_mb || 0} MB)</div>
+        <div>Status: <strong>${llmState}</strong> (Active Slots: ${llm.slots_busy ?? 0})</div>
+        <div>Process Load: CPU <strong>${llm.proc_cpu_pct ?? 0}%</strong> • RAM <strong>${llm.proc_mem_pct ?? 0}%</strong></div>
+        <div>Speed: Prompt <strong>${llm.prompt_tok_per_sec ?? 0} tok/s</strong> • Gen <strong>${llm.gen_tok_per_sec ?? 0} tok/s</strong></div>
+        <div>Total Usage: <strong>${llm.prompt_tokens ?? 0}</strong> prompt + <strong>${llm.completion_tokens ?? 0}</strong> completion tokens</div>
+      `;
+
+      document.getElementById("conns-label").textContent =
+        `${d.summary.established_conns} Established`;
+      document.getElementById("net-val").textContent =
+        `↓ ${r.net_rx_kbps}  ↑ ${r.net_tx_kbps} KB/s`;
+      document.getElementById("ports-val").textContent =
+        `${d.summary.listening_ports} (${d.summary.exposed_ports} exposed)`;
+
+      document.getElementById("baseline-badge").textContent =
+        d.summary.baseline_configured ? "Baseline Active" : "Unbaselined";
+      document.getElementById("sessions-val").textContent =
+        `${d.summary.active_sessions} Active`;
+      document.getElementById("persist-val").textContent =
+        `${d.summary.persistence_items} agents / ${d.persistence.authorized_keys_count} SSH keys`;
+
+      // Charts
+      const hist = d.history || [];
+      drawChart("cpuChart", [
+        { label: "CPU %", color: "#38bdf8", data: hist.map(h => h.cpu_pct), labelX: 10 },
+        { label: "RAM %", color: "#10b981", data: hist.map(h => h.mem_pct), labelX: 110 },
+        { label: "GPU %", color: "#f43f5e", data: hist.map(h => h.gpu_pct ?? 0), labelX: 210 }
+      ], 100);
+
+      drawChart("tempChart", [
+        { label: "CPU °C", color: "#fb923c", data: hist.map(h => h.cpu_temp_c ?? 0), labelX: 10 },
+        { label: "GPU °C", color: "#f43f5e", data: hist.map(h => h.gpu_temp_c ?? 0), labelX: 120 }
+      ], 105);
+
+      drawChart("netChart", [
+        { label: "RX KB/s", color: "#a855f7", data: hist.map(h => h.net_rx_kbps), labelX: 10 },
+        { label: "TX KB/s", color: "#f59e0b", data: hist.map(h => h.net_tx_kbps), labelX: 130 }
+      ], null);
+
+      // Alerts
+      const alerts = d.alerts || [];
+      document.getElementById("alert-counter").textContent = `${alerts.length} Active`;
+      const alertContainer = document.getElementById("alert-list");
+      if (!alerts.length) {
+        alertContainer.innerHTML =
+          `<div style="color: var(--ok); padding: 14px;">✓ No unauthorized usage anomalies detected.</div>`;
+      } else {
+        alertContainer.innerHTML = alerts.map(a => {
+          const dt = new Date(a.ts * 1000).toLocaleTimeString();
+          return `
+            <div class="alert-item ${a.severity}">
+              <div class="alert-header">
+                <span>[${a.severity}] ${a.title}</span>
+                <span class="alert-meta">${a.category} • ${dt}</span>
+              </div>
+              <div class="alert-details">${a.details}</div>
+            </div>
+          `;
+        }).join("");
+      }
+
+      // Listening Ports
+      const listen = d.network.listening || [];
+      document.getElementById("listen-count").textContent = `${listen.length} ports`;
+      document.getElementById("listen-tbody").innerHTML = listen.map(p => {
+        const badge = !p.trusted
+          ? `<span class="badge badge-crit">UNTRUSTED</span>`
+          : p.exposed
+            ? `<span class="badge badge-warn">EXPOSED (*)</span>`
+            : `<span class="badge badge-ok">LOCAL</span>`;
+        return `
+          <tr>
+            <td><strong>${p.command}</strong></td>
+            <td>${p.pid}</td>
+            <td>${p.user}</td>
+            <td>${p.bind_addr}</td>
+            <td>:${p.port}</td>
+            <td>${badge}</td>
+          </tr>
+        `;
+      }).join("");
+
+      // Established Connections
+      const est = d.network.established || [];
+      document.getElementById("est-count").textContent = `${est.length} active`;
+      document.getElementById("est-tbody").innerHTML = est.map(c => `
+        <tr>
+          <td><strong>${c.command}</strong></td>
+          <td>${c.pid}</td>
+          <td>${c.user}</td>
+          <td>${c.local}</td>
+          <td>${c.remote_host}</td>
+          <td>:${c.remote_port}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="6" style="color:var(--muted)">No active external TCP connections</td></tr>`;
+
+      // Top Processes
+      const procs = d.processes || [];
+      document.getElementById("proc-tbody").innerHTML = procs.map(p => {
+        const cpuClass = p.suspicious || p.cpu >= 100 ? "badge-crit" : p.cpu >= 40 ? "badge-warn" : "badge-info";
+        return `
+          <tr>
+            <td>${p.pid}</td>
+            <td>${p.user}</td>
+            <td><span class="badge ${cpuClass}">${p.cpu}%</span></td>
+            <td>${p.mem}%</td>
+            <td>${p.etime}</td>
+            <td>${p.command}</td>
+          </tr>
+        `;
+      }).join("");
+
+      // Active Sessions & Logins
+      const sessRows = [];
+      (d.sessions.active_sessions || []).forEach(s => {
+        const badge = s.is_remote ? "badge-crit" : "badge-ok";
+        sessRows.push(`
+          <tr>
+            <td><span class="badge ${badge}">ACTIVE</span></td>
+            <td><strong>${s.user}</strong> (${s.source})</td>
+            <td>${s.tty}</td>
+            <td>Logged in: ${s.login_time}</td>
+          </tr>
+        `);
+      });
+      (d.sessions.auth_events || []).slice(-6).reverse().forEach(ev => {
+        const b = ev.severity === "WARNING" ? "badge-warn" : "badge-info";
+        sessRows.push(`
+          <tr>
+            <td><span class="badge ${b}">AUTH LOG</span></td>
+            <td>macOS Unified Log</td>
+            <td>security</td>
+            <td>${ev.raw}</td>
+          </tr>
+        `);
+      });
+      (d.sessions.recent_logins || []).slice(0, 8).forEach(l => {
+        sessRows.push(`
+          <tr>
+            <td><span class="badge badge-info">HISTORY</span></td>
+            <td>${l.user}</td>
+            <td>${l.tty}</td>
+            <td>${l.details}</td>
+          </tr>
+        `);
+      });
+      document.getElementById("who-count").textContent =
+        `${(d.sessions.active_sessions || []).length} active`;
+      document.getElementById("auth-tbody").innerHTML = sessRows.join("");
+
+      // GPU Adapters
+      document.getElementById("gpu-panel-label").textContent = `${gpus.length} adapter${gpus.length === 1 ? "" : "s"}`;
+      document.getElementById("gpu-tbody").innerHTML = gpus.map(g => {
+        const uBadge = g.utilization_pct >= 80 ? "badge-crit" : g.utilization_pct >= 40 ? "badge-warn" : "badge-ok";
+        const clBadge = g.ctx_cl > 0 ? `<span class="badge badge-warn">OpenCL: ${g.ctx_cl}</span>` : `OpenCL: 0`;
+        return `
+          <tr>
+            <td><strong>${g.model}</strong></td>
+            <td><span class="badge badge-info">${g.type}</span></td>
+            <td><span class="badge ${uBadge}">${g.utilization_pct}%</span></td>
+            <td>${g.vram_used_mb} / ${g.vram_total_mb} MB (${g.vram_pct}%)</td>
+            <td>${g.surfaces} surfaces / ${g.textures} textures</td>
+            <td>2D: ${g.ctx_2d} • GL: ${g.ctx_gl} • ${clBadge} • Video: ${g.ctx_video}</td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="6" style="color:var(--muted)">No GPU telemetry available</td></tr>`;
+
+      // Persistence
+      const pItems = d.persistence.items || [];
+      document.getElementById("persist-count").textContent = `${pItems.length} plists`;
+      document.getElementById("persist-tbody").innerHTML = pItems.map(item => {
+        const b = item.status === "trusted" ? "badge-ok" : "badge-crit";
+        return `
+          <tr>
+            <td><span class="badge ${b}">${item.status.toUpperCase()}</span></td>
+            <td>${item.scope}</td>
+            <td><strong>${item.name}</strong></td>
+            <td>${item.mtime}</td>
+            <td>${item.sha256}</td>
+            <td>${item.path}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    async function saveBaseline() {
+      await fetch("/api/baseline", { method: "POST" });
+      await fetchOverview();
+    }
+
+    async function triggerDeepScan() {
+      await fetch("/api/scan", { method: "POST" });
+      await fetchOverview();
+    }
+
+    async function clearAlerts() {
+      await fetch("/api/alerts/clear", { method: "POST" });
+      await fetchOverview();
+    }
+
+    async function sendLlmPrompt() {
+      const input = document.getElementById("llm-prompt-input");
+      const outBox = document.getElementById("llm-output-box");
+      const btn = document.getElementById("llm-send-btn");
+      const prompt = input.value.trim();
+      if (!prompt) return;
+      btn.disabled = true;
+      btn.textContent = "Generating...";
+      outBox.textContent = "Running inference on Qwen3.5-9B-IQ4_XS (http://127.0.0.1:8080)...";
+      try {
+        const res = await fetch("/api/llm/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, max_tokens: 160 })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          outBox.textContent = `[${data.tok_per_sec} tok/s • ${data.completion_tokens} tokens in ${data.latency_sec}s]\n\n${data.reply}`;
+        } else {
+          outBox.textContent = `Error: ${data.error}`;
+        }
+      } catch (e) {
+        outBox.textContent = `Request failed: ${e}`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Run Prompt";
+        await fetchOverview();
+      }
+    }
+
+    fetchOverview();
+    setInterval(fetchOverview, 4000);
+  </script>
+</body>
+</html>
